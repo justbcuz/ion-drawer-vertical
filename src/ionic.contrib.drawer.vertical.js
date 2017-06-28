@@ -257,11 +257,21 @@
 		}, $handle);
 
 		// autoclose-on-scroll activated? Hook it!
-		if (($attrs.autocloseOnScroll != undefined) && ($attrs.autocloseOnScroll !== 'false')) {
+
+		var autocloseOnScrollValue = $attrs.autocloseOnScroll;
+
+		if ((autocloseOnScrollValue != undefined) && (autocloseOnScrollValue !== 'false')) {
 
 			$timeout(function() {
 
-				var scrollView = $ionicScrollDelegate.getScrollView();
+				var scrollView;
+
+				if (autocloseOnScrollValue !== '') {
+				    scrollView = $ionicScrollDelegate.$getByHandle(autocloseOnScrollValue).getScrollView();
+				}
+                else {
+				    scrollView = $ionicScrollDelegate.getScrollView();
+				}
 
 				if (!scrollView) return;
 
