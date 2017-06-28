@@ -56,8 +56,13 @@
 		var $handle = $element.find('ion-drawer-vertical-handle');
 
 		// Delegate Stuff
-		var delegateGetter = $interpolate($attrs.delegateHandle);
-		var delegateHandle = delegateGetter($scope);
+        var delegateHandle;
+
+        if ($attrs.delegateHandle) {
+          var delegateGetter = $interpolate($attrs.delegateHandle);
+          delegateHandle = delegateGetter($scope);
+        }
+
 		var deregisterInstance = $ionDrawerVerticalDelegate._registerInstance(
 			self, delegateHandle, function() {
 				return $ionicHistory.isActiveScope($scope);
