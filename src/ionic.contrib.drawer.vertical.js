@@ -39,19 +39,6 @@
         // get margin if defined, default is 0 capped at element height
         var margin = (parseInt($attrs.margin) || 0) < $wrapper[0].clientHeight ? (parseInt($attrs.margin) || 0) : $wrapper[0].clientHeight;
 
-        // set initial drawer position
-        // add margin to position
-        var negativePos = margin - $wrapper[0].clientHeight;
-        var positivePos = $wrapper[0].clientHeight - margin;
-
-        if (state === STATE_CLOSE) {
-            if (direction === DIRECTION_DOWN)
-                $wrapper[0].style[ionic.CSS.TRANSFORM] = 'translate3d( 0,' + negativePos + 'px, 0)';
-            else
-                $wrapper[0].style[ionic.CSS.TRANSFORM] = 'translate3d( 0,' + positivePos + 'px, 0)';
-        } else
-            $wrapper[0].style[ionic.CSS.TRANSFORM] = 'translate3d(0, 0, 0)';
-
 		// Get the handle (if any)
 		var $handle = $element.find('ion-drawer-vertical-handle');
 
@@ -256,109 +243,120 @@
 			handleDragEnd(e.gesture.deltaY);
 		}, $handle);
 
-		// autoclose-on-scroll activated? Hook it!
+        $timeout(function () {
 
-		var autocloseOnScrollValue = $attrs.autocloseOnScroll;
+            scrollView = scrollViewDelegate.getScrollView();
 
-		if ((autocloseOnScrollValue != undefined) && (autocloseOnScrollValue !== 'false')) {
+            // autoclose-on-scroll activated? Hook it!
+        
+            var autocloseOnScrollValue = $attrs.autocloseOnScroll;
+        
+            if ((autocloseOnScrollValue != undefined) && (autocloseOnScrollValue !== 'false')) {
 
-			$timeout(function() {
+            if (!scrollView) return;
 
-				var scrollView;
+              if (scrollView.isNative) {
+                      console.warn('$ionDrawerVertical: cannot set up autoclose-on-scroll as the scrollView is native.');
+                      return;
+                  }
 
-				if (autocloseOnScrollValue !== '') {
-				    scrollView = $ionicScrollDelegate.$getByHandle(autocloseOnScrollValue).getScrollView();
-				}
-                else {
-				    scrollView = $ionicScrollDelegate.getScrollView();
-				}
+                    // Monkey patch doTouchStart, doTouchMove, and doTouchEnd so that they trigger events
+                    var oldDoTouchStart = scrollView.doTouchStart.bind(scrollView);
+                    scrollView.doTouchStart = function(touches, timeStamp) {
 
-				if (!scrollView) return;
+                        oldDoTouchStart(touches, timeStamp);
 
-				if (scrollView.isNative) {
-					console.warn('$ionDrawerVertical: cannot set up autoclose-on-scroll as the scrollView is native.');
-					return;
-				}
+                        scrollView.__scrollTopAtTouchStart = scrollView.__scrollTop;
+                        scrollView.__scrollLeftAtTouchStart = scrollView.__scrollLeft;
 
-				// Monkey patch doTouchStart, doTouchMove, and doTouchEnd so that they trigger events
-				var oldDoTouchStart = scrollView.doTouchStart.bind(scrollView);
-				scrollView.doTouchStart = function(touches, timeStamp) {
+                        ionic.trigger('scrollview.touchstart', {
+                            scrollTop: scrollView.__scrollTop,
+                            scrollLeft: scrollView.__scrollLeft,
+                            target: scrollView.__container
+                        });
 
-					oldDoTouchStart(touches, timeStamp);
+                    }
 
-					scrollView.__scrollTopAtTouchStart = scrollView.__scrollTop;
-					scrollView.__scrollLeftAtTouchStart = scrollView.__scrollLeft;
+                    var oldDoTouchMove = scrollView.doTouchMove.bind(scrollView);
+                    scrollView.doTouchMove = function(touches, timeStamp, scale) {
 
-					ionic.trigger('scrollview.touchstart', {
-						scrollTop: scrollView.__scrollTop,
-						scrollLeft: scrollView.__scrollLeft,
-						target: scrollView.__container
-					});
+                        if (!scrollView.__isTracking) {
+                            return;
+                        }
 
-				}
+                        oldDoTouchMove(touches, timeStamp, scale);
 
-				var oldDoTouchMove = scrollView.doTouchMove.bind(scrollView);
-				scrollView.doTouchMove = function(touches, timeStamp, scale) {
+                        ionic.trigger('scrollview.touchmove', {
+                            scrollTop: scrollView.__scrollTop,
+                            deltaY: scrollView.__scrollTopAtTouchStart - scrollView.__scrollTop,
+                            scrollLeft: scrollView.__scrollLeft,
+                            deltaX: scrollView.__scrollLeftAtTouchStart - scrollView.__scrollLeft,
+                            target: scrollView.__container
+                        });
 
-					if (!scrollView.__isTracking) {
-						return;
-					}
+                    }
 
-					oldDoTouchMove(touches, timeStamp, scale);
+                    var oldDoTouchEnd = scrollView.doTouchEnd.bind(scrollView);
+                    scrollView.doTouchEnd = function(e, timeStamp) {
 
-					ionic.trigger('scrollview.touchmove', {
-						scrollTop: scrollView.__scrollTop,
-						deltaY: scrollView.__scrollTopAtTouchStart - scrollView.__scrollTop,
-						scrollLeft: scrollView.__scrollLeft,
-						deltaX: scrollView.__scrollLeftAtTouchStart - scrollView.__scrollLeft,
-						target: scrollView.__container
-					});
+                        if (!scrollView.__isTracking) {
+                            return;
+                        }
+                        oldDoTouchEnd(e, timeStamp);
 
-				}
+                        ionic.trigger('scrollview.touchend', {
+                            scrollTop: scrollView.__scrollTop,
+                            deltaY: scrollView.__scrollTopAtTouchStart - scrollView.__scrollTop,
+                            scrollLeft: scrollView.__scrollLeft,
+                            deltaX: scrollView.__scrollLeftAtTouchStart - scrollView.__scrollLeft,
+                            target: scrollView.__container
+                        });
 
-				var oldDoTouchEnd = scrollView.doTouchEnd.bind(scrollView);
-				scrollView.doTouchEnd = function(e, timeStamp) {
+                    }
 
-					if (!scrollView.__isTracking) {
-						return;
-					}
-					oldDoTouchEnd(e, timeStamp);
+                    ionic.on('scrollview.touchmove', function(e) {
 
-					ionic.trigger('scrollview.touchend', {
-						scrollTop: scrollView.__scrollTop,
-						deltaY: scrollView.__scrollTopAtTouchStart - scrollView.__scrollTop,
-						scrollLeft: scrollView.__scrollLeft,
-						deltaX: scrollView.__scrollLeftAtTouchStart - scrollView.__scrollLeft,
-						target: scrollView.__container
-					});
+                        // @TODO: once the element has reached the closed state during the drag, don't allow one to reopen it during the same drag
 
-				}
+                        // @TODO: allow for a configurable offset
 
-				ionic.on('scrollview.touchmove', function(e) {
+                        if (self.isOrWasOpen()) {
+                            handleDrag(e.detail.deltaY);
+                        }
 
-					// @TODO: once the element has reached the closed state during the drag, don't allow one to reopen it during the same drag
+                    }, scrollView.__container);
 
-					// @TODO: allow for a configurable offset
+                    ionic.on('scrollview.touchend', function(e) {
 
-					if (self.isOrWasOpen()) {
-						handleDrag(e.detail.deltaY);
-					}
+                        if (!self.isClosed()) {
+                            handleDragEnd(e.detail.deltaY, scrollView.__isDecelerating);
+                        }
 
-				}, scrollView.__container);
+                    }, scrollView.__container);
 
-				ionic.on('scrollview.touchend', function(e) {
+            } // End If autocloseOnScrollValue enabled
 
-					if (!self.isClosed()) {
-						handleDragEnd(e.detail.deltaY, scrollView.__isDecelerating);
-					}
+            // set initial drawer position
+            // add margin to position
+            var negativePos = margin - $wrapper[0].clientHeight;
+            var positivePos = $wrapper[0].clientHeight - margin;
 
-				}, scrollView.__container);
+            if (state === STATE_CLOSE) {
+                if (direction === DIRECTION_DOWN) {
+                  transfromDrawer(negativePos);
+                  // $wrapper[0].style[ionic.CSS.TRANSFORM] = 'translate3d( 0,' + negativePos + 'px, 0)';
+                } else {
+                  transfromDrawer(positivePos);
+                  // $wrapper[0].style[ionic.CSS.TRANSFORM] = 'translate3d( 0,' + positivePos + 'px, 0)';
+                }
+            } else {
+                transfromDrawer(0);
+                // $wrapper[0].style[ionic.CSS.TRANSFORM] = 'translate3d(0, 0, 0)';
+            }
 
-			});
+        }); // End Timeout
 
-		}
-
-	}]);
+    }]);
 
 })();
 
@@ -395,3 +393,4 @@
 
 
 })();
+
